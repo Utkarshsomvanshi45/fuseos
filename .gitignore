@@ -1,0 +1,37 @@
+# --- Python / Backend / ML ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+*.pkl
+*.pt
+*.h5
+.ipynb_checkpoints/
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+build/
+.next/
+
+# --- Env & secrets ---
+.env
+.env.local
+*.env
+
+# --- Database ---
+*.db
+*.sqlite3
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Logs ---
+*.log
+logs/
