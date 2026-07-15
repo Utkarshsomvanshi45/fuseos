@@ -24,10 +24,13 @@ def list_risk_events(
 
 
 @router.patch("/{event_id}/status")
-def update_status(event_id: str, new_status: str, db: Session = Depends(get_db)):
+async def update_status(event_id: str, new_status: str, db: Session = Depends(get_db)):
+    from app.websocket.manager import manager
+
     event = db.query(models.RiskEvent).filter(models.RiskEvent.id == event_id).first()
     if not event:
         return {"error": "not found"}
     event.status = new_status
     db.commit()
+    await manager.broadcast({"type": "status_update", "id": event_id, "status": new_status})
     return {"id": event_id, "status": new_status}

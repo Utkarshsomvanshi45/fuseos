@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /dashboard
+Disallow: /monitor
+Disallow: /permits
+Disallow: /alerts
+Disallow: /zones
+Disallow: /compliance
+Disallow: /analytics
+Disallow: /reports
+Disallow: /settings

@@ -1,0 +1,225 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-panel: var(--panel);
+  --color-panel-elevated: var(--panel-elevated);
+  --color-grid-line: var(--grid-line);
+
+  --color-sev-critical: var(--sev-critical);
+  --color-sev-high: var(--sev-high);
+  --color-sev-medium: var(--sev-medium);
+  --color-sev-low: var(--sev-low);
+  --color-sev-normal: var(--sev-normal);
+
+  --color-signal-permit: var(--signal-permit);
+  --color-signal-sensor: var(--signal-sensor);
+  --color-signal-scada: var(--signal-scada);
+  --color-signal-shift: var(--signal-shift);
+  --color-signal-camera: var(--signal-camera);
+  --color-signal-ppe: var(--signal-ppe);
+
+  --color-chart-1: var(--sev-critical);
+  --color-chart-2: var(--sev-high);
+  --color-chart-3: var(--sev-medium);
+  --color-chart-4: var(--sev-low);
+  --color-chart-5: var(--sev-normal);
+
+  --color-sidebar: var(--panel);
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --color-sidebar-accent: var(--panel-elevated);
+  --color-sidebar-accent-foreground: var(--foreground);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-ring: var(--ring);
+}
+
+/* Toxic Lime Ops — dark-first industrial command center */
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(0.18 0.014 155);
+  --foreground: oklch(0.94 0.02 130);
+
+  --panel: oklch(0.22 0.018 155);
+  --panel-elevated: oklch(0.26 0.02 155);
+
+  --card: oklch(0.22 0.018 155);
+  --card-foreground: oklch(0.94 0.02 130);
+
+  --popover: oklch(0.24 0.02 155);
+  --popover-foreground: oklch(0.94 0.02 130);
+
+  /* Brand / interactive — electric cyan, distinct from severity greens */
+  --primary: oklch(0.82 0.14 205);
+  --primary-foreground: oklch(0.16 0.014 210);
+
+  --secondary: oklch(0.3 0.024 155);
+  --secondary-foreground: oklch(0.94 0.02 130);
+
+  --muted: oklch(0.28 0.02 155);
+  --muted-foreground: oklch(0.68 0.03 140);
+
+  --accent: oklch(0.82 0.14 205);
+  --accent-foreground: oklch(0.16 0.014 210);
+
+  --destructive: oklch(0.62 0.22 25);
+  --destructive-foreground: oklch(0.98 0.02 130);
+
+  --border: oklch(0.3 0.024 155 / 60%);
+  --input: oklch(0.3 0.024 155);
+  --ring: oklch(0.82 0.14 205);
+  --grid-line: oklch(1 0 0 / 6%);
+
+  /* Severity ramp — its own system, greens reserved for low/normal */
+  --sev-critical: oklch(0.62 0.24 25);   /* red */
+  --sev-high:     oklch(0.72 0.19 55);   /* orange */
+  --sev-medium:   oklch(0.82 0.18 90);   /* amber */
+  --sev-low:      oklch(0.78 0.19 140);  /* lime */
+  --sev-normal:   oklch(0.7 0.14 155);   /* green */
+
+  /* Signal type icons — kept visually distinct from brand cyan */
+  --signal-permit: oklch(0.78 0.16 65);
+  --signal-sensor: oklch(0.78 0.19 140);
+  --signal-scada:  oklch(0.72 0.16 260);
+  --signal-shift:  oklch(0.78 0.14 315);
+  --signal-camera: oklch(0.7 0.11 190);
+  --signal-ppe:    oklch(0.74 0.19 340);
+}
+
+/* Light-theme scope for authenticated app surfaces.
+   Landing + Login stay dark (they don't use AppLayout). */
+.app-light {
+  --background: oklch(0.995 0 0);
+  --foreground: oklch(0.22 0.02 250);
+  --panel: oklch(1 0 0);
+  --panel-elevated: oklch(0.972 0.004 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 250);
+  --primary: oklch(0.58 0.13 210);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.94 0.006 250);
+  --secondary-foreground: oklch(0.22 0.02 250);
+  --muted: oklch(0.95 0.006 250);
+  --muted-foreground: oklch(0.48 0.02 250);
+  --accent: oklch(0.58 0.13 210);
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.90 0.006 250);
+  --input: oklch(0.94 0.006 250);
+  --ring: oklch(0.58 0.13 210);
+  --grid-line: oklch(0.22 0.02 250 / 6%);
+
+  /* severity — darker/saturated for legibility on light chips */
+  --sev-critical: oklch(0.52 0.22 25);
+  --sev-high:     oklch(0.58 0.17 55);
+  --sev-medium:   oklch(0.58 0.15 85);
+  --sev-low:      oklch(0.52 0.17 145);
+  --sev-normal:   oklch(0.50 0.13 155);
+
+  --signal-permit: oklch(0.55 0.15 65);
+  --signal-sensor: oklch(0.52 0.17 145);
+  --signal-scada:  oklch(0.52 0.16 260);
+  --signal-shift:  oklch(0.52 0.16 315);
+  --signal-camera: oklch(0.50 0.13 190);
+  --signal-ppe:    oklch(0.55 0.20 340);
+}
+
+
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); letter-spacing: -0.01em; }
+  .font-mono, code, kbd, pre { font-family: var(--font-mono); }
+}
+
+@utility grid-bg {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+@utility scanline {
+  position: relative;
+  overflow: hidden;
+}
+@utility scanline-after {
+  &::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 0%, color-mix(in oklab, var(--primary) 10%, transparent) 50%, transparent 100%);
+    animation: scan 3.6s linear infinite;
+    pointer-events: none;
+  }
+}
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@utility sev-critical-bg { background-color: color-mix(in oklab, var(--sev-critical) 18%, transparent); color: var(--sev-critical); }
+@utility sev-high-bg     { background-color: color-mix(in oklab, var(--sev-high) 18%, transparent);     color: var(--sev-high); }
+@utility sev-medium-bg   { background-color: color-mix(in oklab, var(--sev-medium) 18%, transparent);   color: var(--sev-medium); }
+@utility sev-low-bg      { background-color: color-mix(in oklab, var(--sev-low) 18%, transparent);      color: var(--sev-low); }
+@utility sev-normal-bg   { background-color: color-mix(in oklab, var(--sev-normal) 18%, transparent);   color: var(--sev-normal); }
+
+@utility pulse-dot {
+  &::before {
+    content: "";
+    display: inline-block;
+    width: 0.5rem; height: 0.5rem;
+    border-radius: 9999px;
+    background: currentColor;
+    margin-right: 0.4rem;
+    box-shadow: 0 0 0 0 currentColor;
+    animation: pulseDot 1.8s ease-out infinite;
+  }
+}
+@keyframes pulseDot {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 60%, transparent); }
+  70%  { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}

@@ -19,7 +19,9 @@ db = SessionLocal()
 
 # wipe existing data for a clean reseed
 for m in [models.RiskEvent, models.ShiftLog, models.ScadaReading, models.GasReading,
-          models.Permit, models.Zone, models.User]:
+          models.Permit, models.Zone, models.User, models.ComplianceGap,
+          models.Camera, models.DataSource, models.RiskRule, models.NotificationRecipient,
+          models.AuditLogEntry, models.PlantConfig]:
     db.query(m).delete()
 db.commit()
 
@@ -43,6 +45,7 @@ ZONES = [
     ("Z-C2", "Stove Dome C", "Iron Making"),
     ("Z-D1", "Gas Holder Yard", "Utilities"),
     ("Z-D2", "BOF Converter Bay", "Steel Making"),
+    ("Z-D3", "Power House 2", "Utilities"),
 ]
 for zid, name, sector in ZONES:
     db.add(models.Zone(id=zid, name=name, sector=sector))
@@ -138,10 +141,129 @@ RISK_EVENTS = [
          lead_time_minutes=18,
          description="Slag temp elevated during Alpha->Bravo handover window.",
          status="resolved", timestamp=NOW - timedelta(minutes=61)),
+    dict(id="RX-8836", zone_id="Z-A2", risk_type="Upcoming Permit x Trending Gas",
+         severity="low", confidence=58, contributing_signals=["permit", "sensor"],
+         lead_time_minutes=252,
+         description="PTW-228 hot work starts 14:00; CO in adjacent battery already climbing.",
+         status="new", timestamp=NOW - timedelta(minutes=75)),
+    dict(id="RX-8835", zone_id="Z-D2", risk_type="Multi-Permit Overlap",
+         severity="low", confidence=55, contributing_signals=["permit", "scada"],
+         lead_time_minutes=65,
+         description="Electrical permit overlaps with O2-line maintenance window.",
+         status="resolved", timestamp=NOW - timedelta(minutes=90)),
+    dict(id="RX-8834", zone_id="Z-B1", risk_type="Sensor Drift",
+         severity="low", confidence=61, contributing_signals=["sensor"],
+         lead_time_minutes=None,
+         description="Benzene sensor GS-2301 calibration drift 4% vs baseline.",
+         status="acknowledged", timestamp=NOW - timedelta(minutes=105)),
 ]
 for r in RISK_EVENTS:
     db.add(models.RiskEvent(**r))
 db.commit()
+
+# --- compliance gaps ---
+GAPS = [
+    ("Z-B3", "OISD-STD-105 §5.3.2", "OISD 105 Rev.4, 5.3.2",
+     "Confined-space O2 re-check interval exceeded", -27),
+    ("Z-A1", "Factory Act §41-C", "Factories Act 1948 §41-C",
+     "Continuous H2S monitoring not logged for 22 min", -124),
+    ("Z-A2", "OISD-GDN-192", "OISD-GDN-192 §7.1",
+     "Hot-work permit issued without downwind gas check", -1440),
+    ("Z-D1", "IS 5571 §4.2", "IS 5571:2007 §4.2",
+     "Hazardous area classification review overdue", -2160),
+    ("Z-B1", "OISD-STD-105 §6.1", "OISD 105 Rev.4, 6.1",
+     "Line-break permit missing dual sign-off for Class I hazard", -3200),
+    ("Z-C1", "DGMS Circular 12/2019", "DGMS Circular 12/2019 §3",
+     "Cast house temperature log gap exceeds 1-hour SOP window", -4600),
+    ("Z-D2", "Factory Act §36", "Factories Act 1948 §36",
+     "Confined space entry register not updated for latest shift", -5800),
+    ("Z-A1", "Factory Act §79", "Factories Act 1948 §79",
+     "PPE non-compliance detected during active hot-work permit", -95),
+]
+for zone_id, ref, source, desc, offset in GAPS:
+    db.add(models.ComplianceGap(
+        zone_id=zone_id, regulation_ref=ref, source=source, description=desc,
+        detected_at=NOW + timedelta(minutes=offset), status="open",
+    ))
+db.commit()
+
+# --- cameras ---
+CAMERAS = [
+    ("BC_Load Area", "Z-A1", "online", -12),
+    ("CRNCTL-CRNCTL", "Z-A2", "online", -8),
+    ("Scrap Yard", "Z-B1", "online", -5),
+    ("HR Slitting", "Z-B3", "online", -3),
+    ("Main Security Gate", "Z-D1", "online", -1),
+    ("Sinter Plant Gate", "Z-C1", "degraded", -140),
+    ("Weight Bridge", "Z-D2", "online", -2),
+    ("Trap Area", "Z-C2", "offline", -320),
+]
+for name, zone_id, status, offset in CAMERAS:
+    db.add(models.Camera(
+        name=name, zone_id=zone_id, status=status,
+        last_frame_at=NOW + timedelta(minutes=offset), active=True,
+    ))
+db.commit()
+
+# --- data sources ---
+DATA_SOURCES = [
+    ("Draeger Polytron Grid", "DS-GAS-01", "gas_sensors", "online", -1, True),
+    ("ABB 800xA SCADA", "DS-SCADA", "scada", "online", -1, True),
+    ("eSafety PTW System", "DS-PTW", "work_permits", "online", -1, True),
+    ("Kronos Shift Roster", "DS-SHIFT", "shift_logs", "online", -6, True),
+    ("Bosch CCTV Bridge", "DS-CCTV", "cctv", "online", -2, True),
+    ("IMD Weather Feed", "DS-WEATHER", "weather", "online", -9, True),
+]
+for name, code, dtype, status, offset, enabled in DATA_SOURCES:
+    db.add(models.DataSource(
+        name=name, code=code, type=dtype, status=status,
+        last_sync_at=NOW + timedelta(minutes=offset), enabled=enabled,
+    ))
+db.commit()
+
+# --- risk rules ---
+RULES = [
+    ("R1", "Hot work + rising combustible gas", True, 78),
+    ("R2", "Confined space + abnormal process reading", True, 84),
+    ("R3", "Shift changeover + active high-hazard permit", True, 62),
+    ("R4", "Line break + adjacent VOC threshold approach", True, 90),
+    ("R5", "Coverage gap in permitted zone", True, 55),
+]
+for code, name, enabled, sensitivity in RULES:
+    db.add(models.RiskRule(code=code, name=name, enabled=enabled, sensitivity=sensitivity))
+db.commit()
+
+# --- notification recipients ---
+RECIPIENTS = [
+    ("Ananya Rao", "Safety Head", "ananya.rao@ris.gov.in", True, True, True),
+    ("Kunal Mahato", "Shift Super", "kunal.m@ris.gov.in", True, True, False),
+    ("S. Basu", "Electrical Lead", "s.basu@ris.gov.in", True, False, False),
+    ("M. Iqbal", "Compliance", "iqbal@ris.gov.in", True, False, False),
+]
+for name, role, email, ce, cs, cw in RECIPIENTS:
+    db.add(models.NotificationRecipient(
+        name=name, role=role, email=email,
+        channel_email=ce, channel_sms=cs, channel_whatsapp=cw, enabled=True,
+    ))
+db.commit()
+
+# --- plant config ---
+db.add(models.PlantConfig())
+db.commit()
+
+# --- initial audit log entries ---
+AUDIT_ENTRIES = [
+    ("Ananya Rao", "Updated risk rule R2 sensitivity 80->84", -4),
+    ("System", "Sensor GS-2455 marked offline", -36),
+    ("Kunal Mahato", "Acknowledged event RX-8840", -77),
+    ("Ananya Rao", "Invited user r.desh@ris.gov.in (Viewer)", -172),
+    ("System", "Shift handover Alpha -> Bravo (Z-C1)", -225),
+    ("Priya Nanda", "Closed permit PTW-218 (Radiography)", -237),
+]
+for actor, action, offset in AUDIT_ENTRIES:
+    db.add(models.AuditLogEntry(actor=actor, action=action, timestamp=NOW + timedelta(minutes=offset)))
+db.commit()
+
 db.close()
 
 print("Seed complete.")
