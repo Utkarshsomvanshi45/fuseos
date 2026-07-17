@@ -203,6 +203,14 @@ for name, zone_id, status, offset in CAMERAS:
         name=name, zone_id=zone_id, status=status,
         last_frame_at=NOW + timedelta(minutes=offset), active=True,
     ))
+# Real video source — the only one in this system genuinely backed by actual
+# camera hardware, since it's rendered client-side via getUserMedia() against
+# whatever device opens the Live Feed page. Everything else above is
+# status-only (no real stream, no camera hardware to point at).
+db.add(models.Camera(
+    name="Webcam", zone_id="Z-A1", status="online",
+    last_frame_at=NOW, active=True, stream_source="webcam",
+))
 db.commit()
 
 # --- data sources ---

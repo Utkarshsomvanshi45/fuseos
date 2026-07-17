@@ -298,11 +298,12 @@ export type CameraOut = {
   status: string;
   last_frame_at: string | null;
   active: boolean;
+  stream_source: string | null; // null | "webcam" — see backend/app/database/models.py
 };
 export function getCameras() {
   return get<CameraOut[]>("/api/cameras");
 }
-export function addCamera(camera: { name: string; zone_id: string }) {
+export function addCamera(camera: { name: string; zone_id: string; stream_source?: string | null }) {
   return post<{ id: number; name: string }>("/api/cameras", camera);
 }
 export function toggleCamera(id: number, active: boolean) {
@@ -350,10 +351,14 @@ export function getUsers() {
   return get<UserOut[]>("/api/users");
 }
 export function inviteUser(payload: { name: string; email: string; role?: string; department?: string | null }) {
-  return post<UserOut & { temp_password?: string; error?: string }>("/api/users/invite", payload);
+  return post<UserOut & { temp_password?: string; email_sent?: boolean; error?: string }>("/api/users/invite", payload);
 }
 export function deleteUser(id: number) {
   return del<{ deleted: number }>(`/api/users/${id}`);
+}
+
+export function changePassword(current_password: string, new_password: string) {
+  return post<{ updated: boolean }>("/api/auth/change-password", { current_password, new_password });
 }
 
 // ---------------------------------------------------------------------------
@@ -423,3 +428,46 @@ export function updatePlantConfig(payload: Partial<PlantConfigOut>) {
 }
 
 export { ApiError };
+
+// ---------------------------------------------------------------------------
+// Reports — real server-generated PDFs, not client-side fakes
+// ---------------------------------------------------------------------------
+export type ReportType =
+  | "daily_risk" | "weekly_compound" | "permit_audit"
+  | "compliance_gap" | "data_source_health" | "monthly_executive";
+
+export type ReportRequest = {
+  report_type: ReportType;
+  date_from?: string | null;  // "YYYY-MM-DD"
+  date_to?: string | null;
+  zone_id?: string | null;    // "all" or a zone id
+  shift?: string | null;      // "all" | "Shift A" | "Shift B" | "Shift C"
+  severity_floor?: string | null; // "all" | "low" | "medium" | "high" | "critical"
+};
+
+export async function generateReport(req: ReportRequest): Promise<{ blob: Blob; filename: string }> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/reports/generate`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(req),
+    });
+  } catch {
+    throw new ApiError(`Could not reach FUSE.OS backend at ${API_BASE}. Is it running?`, 0);
+  }
+  if (!res.ok) {
+    let detail = "";
+    try { detail = (await res.json())?.detail ?? ""; } catch { /* ignore */ }
+    throw new ApiError(detail || `Report generation failed (${res.status})`, res.status);
+  }
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const filename = match?.[1] ?? `fuseos-${req.report_type}.pdf`;
+  const blob = await res.blob();
+  return { blob, filename };
+}

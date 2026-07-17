@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppLayout, PageHeader, SectionCard } from "@/components/app-layout";
 import { Skeleton } from "@/components/risk-primitives";
 import { useState } from "react";
-import { UserPlus, Trash2, KeyRound, Bell, X, Radio, CheckCircle2, AlertTriangle, Plus, Video, Loader2 } from "lucide-react";
+import { UserPlus, Trash2, KeyRound, Bell, X, Radio, CheckCircle2, AlertTriangle, Plus, Video, Loader2, Lock } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
 import {
   useCameras, useToggleCamera, useDeleteCamera, useAddCamera,
   useDataSources, useToggleDataSource,
@@ -13,7 +14,7 @@ import {
   useRecipients, useAddRecipient, useUpdateRecipient, useDeleteRecipient,
   useAuditLog,
   usePlantConfig, useUpdatePlantConfig,
-  useZones,
+  useZones, useChangePassword,
 } from "@/lib/queries";
 
 
@@ -62,13 +63,14 @@ function CamerasTab() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [zoneId, setZoneId] = useState(zones?.[0]?.id ?? "");
+  const [useWebcam, setUseWebcam] = useState(false);
 
   async function submitAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !zoneId) return;
-    await addCam.mutateAsync({ name, zone_id: zoneId });
+    await addCam.mutateAsync({ name, zone_id: zoneId, stream_source: useWebcam ? "webcam" : null });
     toast(`${name} added`, "success");
-    setName(""); setAdding(false);
+    setName(""); setUseWebcam(false); setAdding(false);
   }
 
   return (
@@ -129,6 +131,10 @@ function CamerasTab() {
                 <select value={zoneId} onChange={(e) => setZoneId(e.target.value)} className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm">
                   {(zones ?? []).map((z) => <option key={z.id} value={z.id}>{z.id} · {z.name}</option>)}
                 </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={useWebcam} onChange={(e) => setUseWebcam(e.target.checked)} className="accent-[color:var(--primary)]" />
+                Use this browser's webcam as the video source (the only real feed available — everything else is status-only)
               </label>
               <div className="pt-2 flex justify-end gap-2 border-t border-border">
                 <button type="button" onClick={() => setAdding(false)} className="h-8 px-3 rounded border border-border text-sm">Cancel</button>
@@ -305,12 +311,38 @@ function Rules() {
 // ---------------------------------------------------------------------------
 function UsersTab() {
   const [inviting, setInviting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { data: users, isLoading } = useUsers();
   const del = useDeleteUser();
+
+  async function handleDelete(id: number, name: string) {
+    setDeleteError(null);
+    try {
+      await del.mutateAsync(id);
+      toast(`Removed ${name}`, "success");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Could not remove user";
+      setDeleteError(msg);
+      toast(msg, "error");
+    }
+  }
+
   return (
     <SectionCard title="Users" right={
-      <button onClick={() => setInviting(true)} className="h-8 px-3 rounded bg-primary text-primary-foreground text-xs font-medium inline-flex items-center gap-1.5"><UserPlus className="h-3.5 w-3.5" /> Invite user</button>
+      isAdmin
+        ? <button onClick={() => setInviting(true)} className="h-8 px-3 rounded bg-primary text-primary-foreground text-xs font-medium inline-flex items-center gap-1.5"><UserPlus className="h-3.5 w-3.5" /> Invite user</button>
+        : <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1"><Lock className="h-3 w-3" /> View only</span>
     }>
+      {!isAdmin && (
+        <div className="mb-3 text-xs text-muted-foreground bg-[var(--panel-elevated)] border border-border rounded p-2.5">
+          Only Admins can invite or remove users. You're signed in as <span className="font-mono text-foreground">{user?.role}</span> — you can view the roster below.
+        </div>
+      )}
+      {deleteError && (
+        <div className="mb-3 rounded border border-[color:var(--sev-critical)]/40 bg-[color:var(--sev-critical)]/10 px-3 py-2 text-xs text-[color:var(--sev-critical)]">{deleteError}</div>
+      )}
       {isLoading ? (
         <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
       ) : (
@@ -324,18 +356,21 @@ function UsersTab() {
           </tr>
         </thead>
         <tbody>
-          {(users ?? []).map((u) => (
-            <tr key={u.id} className="border-b border-border/50">
-              <td className="p-2"><div className="text-sm">{u.name}</div><div className="text-[11px] font-mono text-muted-foreground">{u.email}</div></td>
-              <td className="p-2"><span className={`text-[11px] font-mono uppercase tracking-wider px-2 py-0.5 rounded ${u.role==="Admin"?"bg-primary/15 text-primary":"bg-[var(--panel-elevated)] text-muted-foreground"}`}>{u.role}</span></td>
-              <td className="p-2 text-xs">{u.department ?? "—"}</td>
-              <td className="p-2 text-right">
-                {u.role !== "Admin" && (
-                  <button onClick={() => { del.mutate(u.id); toast(`Removed ${u.name}`, "success"); }} className="text-muted-foreground hover:text-[color:var(--sev-critical)]"><Trash2 className="h-4 w-4" /></button>
-                )}
-              </td>
-            </tr>
-          ))}
+          {(users ?? []).map((u) => {
+            const isSelf = u.email === user?.email;
+            return (
+              <tr key={u.id} className="border-b border-border/50">
+                <td className="p-2"><div className="text-sm">{u.name}{isSelf && <span className="text-[11px] text-muted-foreground"> (you)</span>}</div><div className="text-[11px] font-mono text-muted-foreground">{u.email}</div></td>
+                <td className="p-2"><span className={`text-[11px] font-mono uppercase tracking-wider px-2 py-0.5 rounded ${u.role==="admin"?"bg-primary/15 text-primary":"bg-[var(--panel-elevated)] text-muted-foreground"}`}>{u.role}</span></td>
+                <td className="p-2 text-xs">{u.department ?? "—"}</td>
+                <td className="p-2 text-right">
+                  {isAdmin && !isSelf && (
+                    <button onClick={() => handleDelete(u.id, u.name)} disabled={del.isPending} className="text-muted-foreground hover:text-[color:var(--sev-critical)] disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       )}
@@ -348,47 +383,94 @@ function InviteModal({ onClose }: { onClose: () => void }) {
   const invite = useInviteUser();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("Operator");
+  const [role, setRole] = useState("viewer");
+  const [error, setError] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<{ email: string; temp_password: string; email_sent: boolean } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !email) return;
+    setError(null);
     try {
-      await invite.mutateAsync({ name, email, role });
-      toast("Invite sent", "success");
-      onClose();
-    } catch {
-      toast("Could not send invite", "error");
+      const res = await invite.mutateAsync({ name, email, role });
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      if (!res.temp_password) {
+        setError("Invite succeeded but no temporary password was returned.");
+        return;
+      }
+      setCredentials({ email: res.email, temp_password: res.temp_password, email_sent: !!res.email_sent });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not send invite — check backend connection.");
     }
   }
 
+  function copyCreds() {
+    if (!credentials) return;
+    navigator.clipboard.writeText(`Email: ${credentials.email}\nTemporary password: ${credentials.temp_password}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={credentials ? undefined : onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-lg border border-border bg-[var(--panel)] shadow-2xl">
         <header className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="font-display font-semibold">Invite user</h3>
-          <button onClick={onClose}><X className="h-4 w-4" /></button>
+          <h3 className="font-display font-semibold">{credentials ? "User created" : "Invite user"}</h3>
+          {!credentials && <button onClick={onClose}><X className="h-4 w-4" /></button>}
         </header>
-        <form onSubmit={submit} className="p-4 space-y-3 text-sm">
-          <label className="block"><span className="text-[10px] uppercase tracking-wider text-muted-foreground">Full name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm" />
-          </label>
-          <label className="block"><span className="text-[10px] uppercase tracking-wider text-muted-foreground">Email</span>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm" />
-          </label>
-          <label className="block">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Role</span>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm">
-              <option>Admin</option><option>Operator</option><option>Viewer</option>
-            </select>
-          </label>
-          <footer className="pt-2 border-t border-border flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="h-8 px-3 rounded border border-border text-sm">Cancel</button>
-            <button type="submit" disabled={invite.isPending} className="h-8 px-3 rounded bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60 inline-flex items-center gap-1.5">
-              {invite.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Send invite
-            </button>
-          </footer>
-        </form>
+
+        {credentials ? (
+          <div className="p-4 space-y-3 text-sm">
+            {credentials.email_sent ? (
+              <div className="rounded border border-primary/40 bg-primary/8 px-3 py-2 text-xs text-primary flex items-start gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                An email with these credentials was just sent to <span className="font-mono">{credentials.email}</span>.
+              </div>
+            ) : (
+              <div className="rounded border border-[color:var(--sev-medium)]/40 bg-[color:var(--sev-medium)]/10 px-3 py-2 text-xs text-[color:var(--sev-medium)] flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                Email delivery didn't go through (SMTP not configured or the send failed) — share these credentials with them directly instead.
+              </div>
+            )}
+            <div className="rounded border border-border bg-[var(--panel-elevated)] p-3 font-mono text-xs space-y-1.5">
+              <div><span className="text-muted-foreground">Email</span> — {credentials.email}</div>
+              <div><span className="text-muted-foreground">Temp password</span> — <span className="text-primary">{credentials.temp_password}</span></div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">They can sign in at <span className="font-mono">/login</span> with these, then change their password from Settings → Security.</p>
+            <footer className="pt-2 border-t border-border flex justify-end gap-2">
+              <button onClick={copyCreds} className="h-8 px-3 rounded border border-border text-sm">{copied ? "Copied!" : "Copy credentials"}</button>
+              <button onClick={onClose} className="h-8 px-3 rounded bg-primary text-primary-foreground text-sm font-medium">Done</button>
+            </footer>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="p-4 space-y-3 text-sm">
+            {error && (
+              <div className="rounded-md border border-[color:var(--sev-critical)]/40 bg-[color:var(--sev-critical)]/10 px-3 py-2 text-xs text-[color:var(--sev-critical)]">{error}</div>
+            )}
+            <label className="block"><span className="text-[10px] uppercase tracking-wider text-muted-foreground">Full name</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm" />
+            </label>
+            <label className="block"><span className="text-[10px] uppercase tracking-wider text-muted-foreground">Email</span>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Role</span>
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm">
+                <option value="admin">Admin</option><option value="operator">Operator</option><option value="viewer">Viewer</option>
+              </select>
+            </label>
+            <footer className="pt-2 border-t border-border flex justify-end gap-2">
+              <button type="button" onClick={onClose} className="h-8 px-3 rounded border border-border text-sm">Cancel</button>
+              <button type="submit" disabled={invite.isPending} className="h-8 px-3 rounded bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60 inline-flex items-center gap-1.5">
+                {invite.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Send invite
+              </button>
+            </footer>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -497,19 +579,53 @@ function Notifs() {
 }
 
 // ---------------------------------------------------------------------------
-// Security — no backend endpoint for password/session management, stays local
+// Security — now backed by a real POST /api/auth/change-password endpoint
 // ---------------------------------------------------------------------------
 function Security() {
   const { user } = useAuth();
+  const changePassword = useChangePassword();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (next.length < 8) { setError("New password must be at least 8 characters."); return; }
+    if (next !== confirm) { setError("New password and confirmation don't match."); return; }
+    try {
+      await changePassword.mutateAsync({ current, next });
+      toast("Password updated", "success");
+      setCurrent(""); setNext(""); setConfirm("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update password.");
+    }
+  }
+
   return (
     <div className="grid lg:grid-cols-2 gap-5">
       <SectionCard title="Change password">
-        <div className="space-y-3 text-sm">
-          <Field label="Current password" v="" />
-          <Field label="New password" v="" />
-          <Field label="Confirm new password" v="" />
-          <button onClick={() => toast("Password updated", "success")} className="h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium inline-flex items-center gap-1.5"><KeyRound className="h-4 w-4" /> Update password</button>
-        </div>
+        <form onSubmit={submit} className="space-y-3 text-sm">
+          {error && (
+            <div className="rounded-md border border-[color:var(--sev-critical)]/40 bg-[color:var(--sev-critical)]/10 px-3 py-2 text-xs text-[color:var(--sev-critical)]">{error}</div>
+          )}
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Current password</span>
+            <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm" />
+          </label>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">New password</span>
+            <input type="password" value={next} onChange={(e) => setNext(e.target.value)} className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm" />
+          </label>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Confirm new password</span>
+            <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="mt-1 w-full h-9 px-3 rounded border border-border bg-[var(--panel-elevated)] text-sm" />
+          </label>
+          <button type="submit" disabled={changePassword.isPending} className="h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium inline-flex items-center gap-1.5 disabled:opacity-60">
+            {changePassword.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} Update password
+          </button>
+        </form>
       </SectionCard>
       <SectionCard title="Account">
         <div className="space-y-2 text-sm">

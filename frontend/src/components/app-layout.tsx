@@ -1,34 +1,39 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, Radio, FileText, AlertTriangle, Map, ScrollText,
   BarChart3, FileBarChart, Settings, Bell, LogOut, Zap, Menu,
   CheckCircle2, Info, AlertCircle, Video,
 } from "lucide-react";
+import { PLANT } from "@/lib/mock-data";
 import { AICopilot } from "./ai-copilot";
 import type { ToastPayload } from "@/lib/toast";
 import { useAuth } from "@/lib/auth";
 import { useDashboardSummary, useCameras, useRiskEvents, usePlantConfig } from "@/lib/queries";
 import { useLiveSocket } from "@/lib/use-live-socket";
-import type { PlantConfigOut } from "@/lib/api";
 
-/** Determine which shift (A/B/C) is active given current HH:MM and config. */
-function currentShiftLabel(config: PlantConfigOut | undefined, now: string): string {
-  if (!config) return "";
-  const shifts = [
-    { name: "A", s: config.shift_a_start, e: config.shift_a_end },
-    { name: "B", s: config.shift_b_start, e: config.shift_b_end },
-    { name: "C", s: config.shift_c_start, e: config.shift_c_end },
+function timeToMinutes(t: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+function inShiftWindow(nowMin: number, start: string, end: string): boolean {
+  const s = timeToMinutes(start), e = timeToMinutes(end);
+  if (s == null || e == null || s === e) return false;
+  return s < e ? nowMin >= s && nowMin < e : nowMin >= s || nowMin < e; // handles overnight wrap
+}
+function currentShiftLabel(config: ReturnType<typeof usePlantConfig>["data"]): string | null {
+  if (!config) return null;
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const candidates: [string, string | null, string | null][] = [
+    ["Shift A", config.shift_a_start, config.shift_a_end],
+    ["Shift B", config.shift_b_start, config.shift_b_end],
+    ["Shift C", config.shift_c_start, config.shift_c_end],
   ];
-  for (const sh of shifts) {
-    if (!sh.s || !sh.e) continue;
-    const crossesMidnight = sh.s > sh.e;
-    const inRange = crossesMidnight
-      ? now >= sh.s || now < sh.e
-      : now >= sh.s && now < sh.e;
-    if (inRange) return `Shift ${sh.name} · ${sh.s}–${sh.e}`;
+  for (const [label, start, end] of candidates) {
+    if (start && end && inShiftWindow(nowMin, start, end)) return `${label} · ${start}–${end}`;
   }
-  return "";
+  return null;
 }
 
 const NAV = [
@@ -98,10 +103,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { data: cameras } = useCameras();
   const { data: newEvents } = useRiskEvents({ limit: 100 });
   const { data: plantConfig } = usePlantConfig();
-
-  const plantName = plantConfig?.plant_name ?? "FUSE.OS Plant";
-  const plantCode = plantConfig?.plant_code ?? "";
-  const shiftLabel = useMemo(() => currentShiftLabel(plantConfig, now), [plantConfig, now]);
+  const shiftLabel = currentShiftLabel(plantConfig);
 
   const camerasOnline = cameras?.filter((c) => c.status === "online").length ?? 0;
   const camerasTotal = cameras?.length ?? 0;
@@ -144,11 +146,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <Menu className="h-4 w-4" />
           </button>
           <div className="flex items-center gap-3 min-w-0">
-            <div className="text-sm font-medium truncate">{plantName}</div>
-            {plantCode && <div className="text-xs text-muted-foreground hidden md:block truncate">{plantCode}</div>}
+            <div className="text-sm font-medium truncate">{plantConfig?.plant_name ?? PLANT.name}</div>
+            <div className="text-xs text-muted-foreground hidden md:block truncate">{PLANT.sector}</div>
           </div>
           <div className="ml-auto flex items-center gap-2 sm:gap-4 text-xs">
-            {shiftLabel && <span className="text-primary pulse-dot font-mono hidden sm:inline">{shiftLabel}</span>}
+            <span className="text-primary pulse-dot font-mono hidden sm:inline">{shiftLabel ?? "No shift configured"}</span>
             <span className="text-muted-foreground font-mono hidden xl:inline">Sensors <span className="text-foreground">{summary ? `${summary.sensors_online}/${summary.sensors_total}` : "—"}</span></span>
             <span className="text-muted-foreground font-mono hidden xl:inline">CCTV <span className="text-foreground">{cameras ? `${camerasOnline}/${camerasTotal}` : "—"}</span></span>
             <span className="text-muted-foreground font-mono hidden md:inline">{now} IST</span>

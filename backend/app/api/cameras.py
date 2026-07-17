@@ -12,6 +12,7 @@ router = APIRouter(prefix="/api/cameras", tags=["cameras"])
 class CameraIn(BaseModel):
     name: str
     zone_id: str
+    stream_source: str | None = None  # None or "webcam"
 
 
 class CameraToggle(BaseModel):
@@ -23,7 +24,7 @@ def list_cameras(db: Session = Depends(get_db)):
     cameras = db.query(models.Camera).all()
     return [
         {"id": c.id, "name": c.name, "zone_id": c.zone_id, "status": c.status,
-         "last_frame_at": c.last_frame_at, "active": c.active}
+         "last_frame_at": c.last_frame_at, "active": c.active, "stream_source": c.stream_source}
         for c in cameras
     ]
 
@@ -31,7 +32,7 @@ def list_cameras(db: Session = Depends(get_db)):
 @router.post("")
 def add_camera(camera: CameraIn, db: Session = Depends(get_db)):
     new_cam = models.Camera(
-        name=camera.name, zone_id=camera.zone_id,
+        name=camera.name, zone_id=camera.zone_id, stream_source=camera.stream_source,
         status="online", last_frame_at=datetime.utcnow(), active=True,
     )
     db.add(new_cam)

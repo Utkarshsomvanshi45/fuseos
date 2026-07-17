@@ -187,6 +187,11 @@ export function useDeleteUser() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.users }),
   });
 }
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: ({ current, next }: { current: string; next: string }) => api.changePassword(current, next),
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Settings — Notifications

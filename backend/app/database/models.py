@@ -20,6 +20,11 @@ class Camera(Base):
     status = Column(String, default="online")   # online / offline / degraded
     last_frame_at = Column(DateTime, nullable=True)
     active = Column(Boolean, default=True)
+    # None = no real video source (status-only, honest placeholder in UI).
+    # "webcam" = frontend renders a real getUserMedia() feed from this device's
+    # camera — there's no camera hardware/RTSP in this system otherwise, so
+    # this is the one genuinely real video source available.
+    stream_source = Column(String, nullable=True)
 
 
 class DataSource(Base):

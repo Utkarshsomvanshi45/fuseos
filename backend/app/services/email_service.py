@@ -164,3 +164,65 @@ def send_alert_email(recipients: list[str], risk_event: dict):
     except Exception as e:
         print(f"[email_service] Failed to send alert email: {e}")
         return False
+
+
+def render_invite_email(name: str, email: str, temp_password: str, role: str) -> str:
+    login_url = f"{APP_BASE_URL}/login"
+    return f"""
+    <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:6px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 0 0 1px #e5e7eb;">
+      <div style="background:#111827;padding:18px 28px;">
+        <div style="color:#22d3ee;font-family:monospace;font-weight:bold;font-size:16px;">
+          FUSE<span style="color:#ffffff;">.OS</span>
+        </div>
+      </div>
+      <div style="padding:28px;">
+        <div style="color:#111827;font-size:18px;font-weight:bold;">You've been added to FUSE.OS</div>
+        <div style="color:#6b7280;font-size:13px;margin-top:6px;">Rourkela Integrated Steelworks · Sector 4</div>
+        <p style="color:#374151;font-size:13px;line-height:1.6;margin-top:18px;">
+          Hi {name}, an administrator has created a FUSE.OS account for you with the
+          <b>{role}</b> role. Use the temporary credentials below to sign in, and change
+          your password immediately afterward from Settings → Security.
+        </p>
+        <table style="width:100%;border-collapse:collapse;margin:18px 0;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;">
+          <tr><td style="padding:12px 18px;color:#6b7280;font-size:12px;width:40%;">Email</td>
+              <td style="padding:12px 18px;color:#111827;font-size:13px;font-weight:bold;">{email}</td></tr>
+          <tr><td style="padding:12px 18px;color:#6b7280;font-size:12px;">Temporary password</td>
+              <td style="padding:12px 18px;color:#111827;font-size:13px;font-weight:bold;font-family:monospace;">{temp_password}</td></tr>
+        </table>
+        <div style="text-align:center;margin:24px 0;">
+          <a href="{login_url}" style="display:inline-block;background:#111827;color:#ffffff;font-size:13px;font-weight:bold;padding:12px 28px;border-radius:6px;text-decoration:none;">
+            Sign in to FUSE.OS
+          </a>
+        </div>
+        <p style="color:#9ca3af;font-size:11px;line-height:1.5;">
+          If you weren't expecting this, contact your plant administrator before using these credentials.
+        </p>
+      </div>
+      <div style="padding:14px 28px;background:#f9fafb;border-top:1px solid #f3f4f6;color:#9ca3af;font-size:10px;">
+        This is an automated account-provisioning email. Do not reply.
+      </div>
+    </div>
+    """
+
+
+def send_invite_email(name: str, email: str, temp_password: str, role: str) -> bool:
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        print("[email_service] SMTP not configured — skipping invite send. "
+              "Set SMTP_USER/SMTP_PASSWORD in .env to enable.")
+        return False
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Your FUSE.OS account is ready"
+    msg["From"] = settings.SMTP_USER
+    msg["To"] = email
+    msg.attach(MIMEText(render_invite_email(name, email, temp_password, role), "html"))
+
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_USER, [email], msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[email_service] Failed to send invite email: {e}")
+        return False

@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.database.database import Base, engine
 from app.api import (
     zones, permits, risk_events, dashboard, ingest, analytics, compliance, alerts_test,
-    cameras, data_sources, risk_rules, users, notifications, audit_log, plant_config, sensors,
+    cameras, data_sources, risk_rules, users, notifications, audit_log, plant_config, sensors, reports,
 )
 from app.auth import routes as auth_routes
 from app.websocket.manager import manager
@@ -37,6 +37,7 @@ app.include_router(notifications.router)
 app.include_router(audit_log.router)
 app.include_router(plant_config.router)
 app.include_router(sensors.router)
+app.include_router(reports.router)
 
 
 @app.get("/")

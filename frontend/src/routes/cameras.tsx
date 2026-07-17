@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppLayout, PageHeader, SectionCard } from "@/components/app-layout";
 import { Skeleton } from "@/components/risk-primitives";
-import { useState } from "react";
-import { Video, VideoOff, AlertTriangle, Plus, Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Video, VideoOff, AlertTriangle, Plus, Search, CameraIcon } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useCameras, useZones } from "@/lib/queries";
 
@@ -15,6 +15,78 @@ function statusMeta(s: string) {
   if (s === "online")   return { color: "var(--sev-normal)",   label: "Online" };
   if (s === "degraded") return { color: "var(--sev-medium)",   label: "Degraded" };
   return                        { color: "var(--sev-critical)", label: "Offline" };
+}
+
+// The only genuinely real video source in this system — everything else is
+// status-only, since there's no actual camera hardware/RTSP to point at.
+// This renders whatever camera the browser has access to on the device
+// viewing the page (laptop webcam, USB cam, etc.) via getUserMedia().
+function WebcamFeed() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [state, setState] = useState<"idle" | "requesting" | "live" | "denied" | "unavailable">("idle");
+
+  async function start() {
+    setState("requesting");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      streamRef.current = stream;
+      setState("live");
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : "";
+      setState(name === "NotFoundError" ? "unavailable" : "denied");
+    }
+  }
+
+  // Auto-start as soon as this card mounts — no manual click needed.
+  useEffect(() => {
+    start();
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  // The <video> element only exists in the DOM once state === "live" (see
+  // render below), so the stream can't be attached synchronously inside
+  // start() — videoRef.current would still be null at that point. This runs
+  // after React commits the "live" render, once the element is real.
+  useEffect(() => {
+    if (state === "live" && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [state]);
+
+  function stop() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setState("idle");
+  }
+
+  if (state === "live") {
+    return (
+      <>
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+        <button onClick={stop} className="absolute bottom-2 right-2 h-6 px-2 rounded bg-black/60 text-white text-[10px] font-mono uppercase tracking-wider">Stop</button>
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-2 text-center px-4">
+      <CameraIcon className="h-6 w-6 text-muted-foreground" />
+      {(state === "idle" || state === "requesting") && (
+        <span className="text-[11px] text-muted-foreground">{state === "requesting" ? "Requesting camera access…" : "Starting this device's camera…"}</span>
+      )}
+      {state === "denied" && (
+        <>
+          <span className="text-[11px] text-[color:var(--sev-medium)]">Camera access denied or blocked by the browser.</span>
+          <button onClick={start} className="mt-1 h-7 px-3 rounded border border-border text-xs">Try again</button>
+        </>
+      )}
+      {state === "unavailable" && <span className="text-[11px] text-[color:var(--sev-critical)]">No camera found on this device.</span>}
+    </div>
+  );
 }
 
 function Cameras() {
@@ -93,8 +165,10 @@ function Cameras() {
             const zone = zones?.find(z => z.id === c.zone_id);
             return (
               <div key={c.id} className="rounded-lg border border-border bg-[var(--panel-elevated)] overflow-hidden flex flex-col">
-                <div className="aspect-video bg-[var(--panel)] border-b border-border relative flex items-center justify-center">
-                  {c.status === "offline" ? (
+                <div className="aspect-video bg-[var(--panel)] border-b border-border relative flex items-center justify-center overflow-hidden">
+                  {c.stream_source === "webcam" ? (
+                    <WebcamFeed />
+                  ) : c.status === "offline" ? (
                     <div className="flex flex-col items-center gap-1.5 text-[color:var(--sev-critical)]">
                       <VideoOff className="h-6 w-6" />
                       <span className="text-[10px] font-mono uppercase tracking-wider">No signal</span>
