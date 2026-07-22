@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageSquare, X, Send, Sparkles, GripVertical } from "lucide-react";
 import { useRouterState } from "@tanstack/react-router";
+import type { CopilotAsk } from "@/lib/copilot-bus";
 
 const SUGGESTIONS: Record<string, string[]> = {
   "/dashboard":  ["What's driving Z-B1 critical?", "Any permits at risk right now?", "Summarize the shift so far"],
@@ -42,6 +43,28 @@ export function AICopilot() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [open]);
+
+  // The default/remembered position is calculated for the small collapsed
+  // button (BTN_H=48), not the full panel (PANEL_H=520). Without this, opening
+  // the panel from near the bottom of the screen renders most of it below the
+  // visible viewport — this re-clamps to the panel's real size the moment it opens.
+  useEffect(() => {
+    if (open) setPos((p) => clampToViewport(p, PANEL_W, PANEL_H));
+  }, [open]);
+
+  // Lets other components (e.g. a dashboard insight card's "Ask AI" button)
+  // open this panel pre-loaded with a real question/answer instead of firing
+  // a toast that just repeats the same text and disappears.
+  useEffect(() => {
+    function onAsk(e: Event) {
+      const detail = (e as CustomEvent<CopilotAsk>).detail;
+      if (!detail) return;
+      setOpen(true);
+      setMsgs((m) => [...m, { role: "user", text: detail.question }, { role: "ai", text: detail.answer }]);
+    }
+    window.addEventListener("fuse:copilot-ask", onAsk);
+    return () => window.removeEventListener("fuse:copilot-ask", onAsk);
+  }, []);
 
   function onPointerDown(e: React.PointerEvent, w: number, h: number) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -103,7 +126,11 @@ export function AICopilot() {
             <div className="text-[10px] uppercase tracking-wider text-primary pulse-dot">connected to fusion</div>
           </div>
         </div>
-        <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setOpen(false)}
+          className="text-muted-foreground hover:text-foreground"
+        ><X className="h-4 w-4" /></button>
       </header>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">

@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppLayout, PageHeader, SectionCard } from "@/components/app-layout";
 import { Skeleton } from "@/components/risk-primitives";
-import { ScrollText, Search, BookOpen, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ScrollText, Search, BookOpen, AlertTriangle, CheckCircle2, X, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "@/lib/toast";
 import { useComplianceGaps, useComplianceHealth } from "@/lib/queries";
+import type { ComplianceGap } from "@/lib/api";
 
 
 export const Route = createFileRoute("/compliance")({
@@ -25,6 +26,7 @@ function Compliance() {
   const [q, setQ] = useState("");
   const [ans, setAns] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [selectedGap, setSelectedGap] = useState<ComplianceGap | null>(null);
 
   const { data: gaps, isLoading: gapsLoading } = useComplianceGaps();
   const { data: health, isLoading: healthLoading } = useComplianceHealth();
@@ -122,7 +124,7 @@ function Compliance() {
                     <div className="text-sm">{g.description}</div>
                     <div className="text-[11px] text-muted-foreground mt-0.5 font-mono">Detected {new Date(g.detected_at).toLocaleString("en-IN")}{g.source && ` · Source: ${g.source}`}</div>
                   </div>
-                  <button onClick={() => toast(`Case opened for ${g.regulation_ref} · ${g.zone_id}`, "info")} className="text-xs text-primary hover:underline shrink-0">Open case →</button>
+                  <button onClick={() => setSelectedGap(g)} className="text-xs text-primary hover:underline shrink-0">Open case →</button>
                 </div>
               ))}
             </div>
@@ -137,6 +139,56 @@ function Compliance() {
           </>
         )}
       </SectionCard>
+
+      {selectedGap && (
+        <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setSelectedGap(null)}>
+          <aside onClick={(e) => e.stopPropagation()} className="absolute right-0 top-0 h-full w-full max-w-xl bg-[var(--panel)] border-l border-border overflow-y-auto">
+            <header className="flex items-start justify-between p-5 border-b border-border">
+              <div>
+                <div className="text-xs font-mono text-muted-foreground">Case · {selectedGap.regulation_ref}</div>
+                <h2 className="text-xl font-display font-semibold">{selectedGap.description}</h2>
+                <div className="mt-1 text-sm text-muted-foreground">{selectedGap.zone_id} · Detected {new Date(selectedGap.detected_at).toLocaleString("en-IN")}</div>
+              </div>
+              <button onClick={() => setSelectedGap(null)} className="h-8 w-8 rounded-md hover:bg-[var(--panel-elevated)] flex items-center justify-center shrink-0"><X className="h-4 w-4" /></button>
+            </header>
+            <div className="p-5 space-y-4">
+              <div className={`rounded-lg border p-4 ${selectedGap.status === "open" ? "border-[color:var(--sev-medium)]/40 bg-[color:var(--sev-medium)]/10" : "border-[color:var(--sev-normal)]/40 bg-[color:var(--sev-normal)]/10"}`}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  {selectedGap.status === "open"
+                    ? <AlertTriangle className="h-4 w-4 text-[color:var(--sev-medium)]" />
+                    : <ShieldCheck className="h-4 w-4 text-[color:var(--sev-normal)]" />}
+                  <span className="font-semibold text-sm capitalize">{selectedGap.status}</span>
+                </div>
+                <p className="text-sm text-foreground/85">{selectedGap.description}</p>
+              </div>
+
+              <SectionCard title="Case details">
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-start gap-2"><ScrollText className="h-4 w-4 mt-0.5 text-primary" /><span>Cited under <span className="font-mono text-primary">{selectedGap.regulation_ref}</span></span></li>
+                  <li className="flex items-start gap-2"><AlertTriangle className="h-4 w-4 mt-0.5" style={{ color: "var(--signal-permit)" }} /><span>Zone <span className="font-mono">{selectedGap.zone_id}</span></span></li>
+                  {selectedGap.source && (
+                    <li className="flex items-start gap-2"><BookOpen className="h-4 w-4 mt-0.5 text-primary" /><span>Source: {selectedGap.source}</span></li>
+                  )}
+                </ul>
+              </SectionCard>
+
+              <SectionCard title="Actions">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { toast(`Case for ${selectedGap.regulation_ref} assigned to you`, "success"); }}
+                    className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium"
+                  >Assign to me</button>
+                  <button
+                    onClick={() => { toast(`Marked ${selectedGap.regulation_ref} as under review`, "info"); setSelectedGap(null); }}
+                    className="h-8 px-3 rounded-md border border-border bg-[var(--panel-elevated)] text-xs"
+                  >Mark under review</button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-2">Assignment/status here isn't yet backed by a case-management endpoint — it's a local acknowledgment, not persisted.</p>
+              </SectionCard>
+            </div>
+          </aside>
+        </div>
+      )}
     </AppLayout>
   );
 }

@@ -11,6 +11,7 @@ import type { ToastPayload } from "@/lib/toast";
 import { useAuth } from "@/lib/auth";
 import { useDashboardSummary, useCameras, useRiskEvents, usePlantConfig } from "@/lib/queries";
 import { useLiveSocket } from "@/lib/use-live-socket";
+import { WebcamProvider } from "@/lib/webcam-context";
 
 function timeToMinutes(t: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
@@ -126,6 +127,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
+    <WebcamProvider>
     <div className="app-light min-h-screen bg-background text-foreground">
       {/* Fixed sidebar */}
       <aside className="hidden lg:flex fixed top-0 left-0 h-screen w-60 border-r border-border bg-[var(--panel)] flex-col z-40">
@@ -175,6 +177,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <AICopilot />
       <Toaster />
     </div>
+    </WebcamProvider>
   );
 }
 

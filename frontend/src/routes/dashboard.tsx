@@ -7,6 +7,7 @@ import { apiSeverityToUi } from "@/lib/api";
 import { useDashboardSummary, usePermits, useRiskEvents, useSensors, useZones } from "@/lib/queries";
 import { useState } from "react";
 import { toast } from "@/lib/toast";
+import { askCopilot } from "@/lib/copilot-bus";
 import {
   Radar, FileText, MapPin, Clock, ArrowRight,
   AlertTriangle, TrendingUp, WifiOff, CheckCircle2, Sparkles, RefreshCw,
@@ -115,7 +116,7 @@ function Dashboard() {
         right={
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-primary pulse-dot font-mono uppercase tracking-wider">Live</span>
-            <button onClick={() => toast(insights[0] ? `Copilot: ${insights[0].title} — ${insights[0].body}` : "No active insights right now.", "info")} className="text-xs text-primary hover:underline inline-flex items-center gap-1"><Sparkles className="h-3 w-3" /> Ask AI about this shift</button>
+            <button onClick={() => askCopilot("What's driving risk this shift?", insights[0] ? `${insights[0].title} — ${insights[0].body} (${insights[0].sub})` : "No active insights right now — plant nominal.")} className="text-xs text-primary hover:underline inline-flex items-center gap-1"><Sparkles className="h-3 w-3" /> Ask AI about this shift</button>
           </div>
         }
         className="mb-5"
@@ -149,7 +150,7 @@ function Dashboard() {
               <p className="text-xs text-muted-foreground leading-relaxed flex-1">{ins.body}</p>
               <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-mono">{ins.sub}</span>
-                <button onClick={() => toast(`Copilot: ${ins.title.split(":")[0]} — ${ins.body}`, ins.sev === "critical" ? "error" : ins.sev === "high" ? "warn" : "info")} className="text-[11px] text-primary hover:underline">Ask AI →</button>
+                <button onClick={() => askCopilot(`What's happening with ${ins.title.split(":")[0]}?`, `${ins.title.split(":")[1]?.trim() ?? ins.title} — ${ins.body} (${ins.sub})`)} className="text-[11px] text-primary hover:underline">Ask AI →</button>
               </div>
             </div>
           ))}

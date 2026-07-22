@@ -4,7 +4,8 @@ import { Skeleton } from "@/components/risk-primitives";
 import { useEffect, useRef, useState } from "react";
 import { Video, VideoOff, AlertTriangle, Plus, Search, CameraIcon } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { useCameras, useZones } from "@/lib/queries";
+import { useCameras, useToggleCamera, useZones } from "@/lib/queries";
+import { useWebcam } from "@/lib/webcam-context";
 
 export const Route = createFileRoute("/cameras")({
   head: () => ({ meta: [{ title: "Live Feed & Camera Status — FUSE.OS" }, { name: "robots", content: "noindex" }] }),
@@ -19,55 +20,47 @@ function statusMeta(s: string) {
 
 // The only genuinely real video source in this system — everything else is
 // status-only, since there's no actual camera hardware/RTSP to point at.
-// This renders whatever camera the browser has access to on the device
-// viewing the page (laptop webcam, USB cam, etc.) via getUserMedia().
-function WebcamFeed() {
+// The stream itself is owned by WebcamProvider at the app-shell level (so it
+// survives navigating away from this page) — this component just displays it
+// and lets you turn it on/off, keeping the DB's `active` flag on the camera
+// row in sync with whether the browser's camera hardware is actually running.
+function WebcamFeed({ cameraId, dbActive }: { cameraId: number; dbActive: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [state, setState] = useState<"idle" | "requesting" | "live" | "denied" | "unavailable">("idle");
+  const { state, stream, start, stop } = useWebcam();
+  const toggleCam = useToggleCamera();
 
-  async function start() {
-    setState("requesting");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      streamRef.current = stream;
-      setState("live");
-    } catch (err) {
-      const name = err instanceof DOMException ? err.name : "";
-      setState(name === "NotFoundError" ? "unavailable" : "denied");
+  useEffect(() => {
+    if (state === "live" && videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
     }
+  }, [state, stream]);
+
+  // Keep the DB's active flag and the real browser camera in sync no matter
+  // which side changed it (this page's own button, or the Settings toggle).
+  async function turnOff() {
+    stop();
+    if (dbActive) await toggleCam.mutateAsync({ id: cameraId, active: false });
+  }
+  async function turnOn() {
+    await start();
+    if (!dbActive) await toggleCam.mutateAsync({ id: cameraId, active: true });
   }
 
-  // Auto-start as soon as this card mounts — no manual click needed.
-  useEffect(() => {
-    start();
-    return () => {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    };
-  }, []);
-
-  // The <video> element only exists in the DOM once state === "live" (see
-  // render below), so the stream can't be attached synchronously inside
-  // start() — videoRef.current would still be null at that point. This runs
-  // after React commits the "live" render, once the element is real.
-  useEffect(() => {
-    if (state === "live" && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-    }
-  }, [state]);
-
-  function stop() {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setState("idle");
+  if (!dbActive) {
+    return (
+      <div className="flex flex-col items-center gap-2 text-center px-4">
+        <VideoOff className="h-6 w-6 text-muted-foreground" />
+        <span className="text-[11px] text-muted-foreground">Turned off in Camera Management.</span>
+        <button onClick={turnOn} className="mt-1 h-7 px-3 rounded bg-primary text-primary-foreground text-xs font-medium">Turn on</button>
+      </div>
+    );
   }
 
   if (state === "live") {
     return (
       <>
         <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-        <button onClick={stop} className="absolute bottom-2 right-2 h-6 px-2 rounded bg-black/60 text-white text-[10px] font-mono uppercase tracking-wider">Stop</button>
+        <button onClick={turnOff} className="absolute bottom-2 right-2 h-6 px-2 rounded bg-black/60 text-white text-[10px] font-mono uppercase tracking-wider">Stop</button>
       </>
     );
   }
@@ -85,6 +78,7 @@ function WebcamFeed() {
         </>
       )}
       {state === "unavailable" && <span className="text-[11px] text-[color:var(--sev-critical)]">No camera found on this device.</span>}
+      {state === "off" && <button onClick={turnOn} className="mt-1 h-7 px-3 rounded bg-primary text-primary-foreground text-xs font-medium">Turn on</button>}
     </div>
   );
 }
@@ -167,7 +161,7 @@ function Cameras() {
               <div key={c.id} className="rounded-lg border border-border bg-[var(--panel-elevated)] overflow-hidden flex flex-col">
                 <div className="aspect-video bg-[var(--panel)] border-b border-border relative flex items-center justify-center overflow-hidden">
                   {c.stream_source === "webcam" ? (
-                    <WebcamFeed />
+                    <WebcamFeed cameraId={c.id} dbActive={c.active} />
                   ) : c.status === "offline" ? (
                     <div className="flex flex-col items-center gap-1.5 text-[color:var(--sev-critical)]">
                       <VideoOff className="h-6 w-6" />

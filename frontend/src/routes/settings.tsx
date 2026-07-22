@@ -6,6 +6,7 @@ import { UserPlus, Trash2, KeyRound, Bell, X, Radio, CheckCircle2, AlertTriangle
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
+import { useWebcam } from "@/lib/webcam-context";
 import {
   useCameras, useToggleCamera, useDeleteCamera, useAddCamera,
   useDataSources, useToggleDataSource,
@@ -60,17 +61,28 @@ function CamerasTab() {
   const toggleCam = useToggleCamera();
   const deleteCam = useDeleteCamera();
   const addCam = useAddCamera();
+  const webcam = useWebcam();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [zoneId, setZoneId] = useState(zones?.[0]?.id ?? "");
-  const [useWebcam, setUseWebcam] = useState(false);
+  const [useDeviceWebcam, setUseDeviceWebcam] = useState(false);
 
   async function submitAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !zoneId) return;
-    await addCam.mutateAsync({ name, zone_id: zoneId, stream_source: useWebcam ? "webcam" : null });
+    await addCam.mutateAsync({ name, zone_id: zoneId, stream_source: useDeviceWebcam ? "webcam" : null });
     toast(`${name} added`, "success");
-    setName(""); setUseWebcam(false); setAdding(false);
+    setName(""); setUseDeviceWebcam(false); setAdding(false);
+  }
+
+  // For the webcam-backed camera specifically, this toggle needs to actually
+  // start/stop the browser's real camera, not just flip the DB flag — they'd
+  // otherwise drift out of sync with what Live Feed shows.
+  async function handleToggle(id: number, active: boolean, streamSource: string | null) {
+    await toggleCam.mutateAsync({ id, active });
+    if (streamSource === "webcam") {
+      if (active) await webcam.start(); else webcam.stop();
+    }
   }
 
   return (
@@ -106,7 +118,7 @@ function CamerasTab() {
                 <td className="p-2 text-xs"><div className="font-mono">{c.zone_id}</div><div className="text-muted-foreground">{zone?.name}</div></td>
                 <td className="p-2"><span className="text-[11px] font-mono uppercase tracking-wider" style={{ color }}>{c.status}</span></td>
                 <td className="p-2 font-mono text-xs text-muted-foreground">{c.last_frame_at ? new Date(c.last_frame_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"}</td>
-                <td className="p-2 text-center"><Toggle on={c.active} onChange={(v) => toggleCam.mutate({ id: c.id, active: v })} /></td>
+                <td className="p-2 text-center"><Toggle on={c.active} onChange={(v) => handleToggle(c.id, v, c.stream_source)} /></td>
                 <td className="p-2 text-right">
                   <button onClick={() => { deleteCam.mutate(c.id); toast(`Removed ${c.name}`, "success"); }} className="text-muted-foreground hover:text-[color:var(--sev-critical)]"><Trash2 className="h-4 w-4" /></button>
                 </td>
@@ -133,7 +145,7 @@ function CamerasTab() {
                 </select>
               </label>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" checked={useWebcam} onChange={(e) => setUseWebcam(e.target.checked)} className="accent-[color:var(--primary)]" />
+                <input type="checkbox" checked={useDeviceWebcam} onChange={(e) => setUseDeviceWebcam(e.target.checked)} className="accent-[color:var(--primary)]" />
                 Use this browser's webcam as the video source (the only real feed available — everything else is status-only)
               </label>
               <div className="pt-2 flex justify-end gap-2 border-t border-border">
