@@ -266,8 +266,7 @@ Reported metrics: approximately 99.4% accuracy, a 100% catch rate, and a mean le
 ---
 
 ## License
-
-[Add your chosen license here, MIT is a common default for hackathon submissions if you don't have a specific preference.]
+MIT License
 
 ---
 
